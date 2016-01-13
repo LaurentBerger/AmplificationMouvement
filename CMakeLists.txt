@@ -6,7 +6,7 @@ find_package(OpenCV  REQUIRED)
 
 
 file(GLOB AmplificationMouvement_SRCS
-    "*.h"
+    "*.hpp"
     "*.cpp")
 ADD_EXECUTABLE (AmplificationMouvement ${AmplificationMouvement_SRCS})
 
