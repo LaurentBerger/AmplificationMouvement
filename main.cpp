@@ -7,18 +7,29 @@ using namespace cv;
 
 
 class PyramideGaussienne {
-vector<Mat> pyramide;
+vector<Mat> pyr;
 public :
     PyramideGaussienne(Mat );
-    vector<Mat> &get(){return pyramide;};
+    vector<Mat> &get(){return pyr;};
 
 };
 
 class PyramideLaplacienne {
-vector<Mat> pyramide;
+vector<Mat> pyr;
 public :
     PyramideLaplacienne(vector<Mat> &);
-    vector<Mat> &get(){return pyramide;};
+    vector<Mat> &get(){return pyr;};
+
+};
+
+class PyramideRiesz {
+vector<Mat> xPyr;
+vector<Mat> yPyr;
+public :
+    PyramideRiesz(vector<Mat> &);
+    vector<Mat> &get(){return xPyr;};
+    vector<Mat> &getx(){return xPyr;};
+    vector<Mat> &gety(){return yPyr;};
 
 };
 
@@ -27,11 +38,11 @@ PyramideGaussienne::PyramideGaussienne(Mat m)
 {
     Mat x=m;
     Mat y;
-    pyramide.push_back(x);
+    pyr.push_back(x);
     while (x.rows >= 4 && x.cols > 4)
     {
         pyrDown(x,y);
-        pyramide.push_back(y);
+        pyr.push_back(y);
         x=y;
     }
 
@@ -45,7 +56,22 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
         Mat tmp1,tmp2;
         pyrUp(m[i],tmp1);
         subtract(m[i-1],tmp1,tmp2,noArray(),CV_32F);
-        pyramide.push_back(tmp2);
+        pyr.push_back(tmp2);
+    }
+
+}
+
+PyramideRiesz::PyramideRiesz(vector<Mat> &m)
+{
+    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, -0.5, 0, 0.5, 0, 0, 0);
+    Mat yKernel=(Mat_<float>(3,3) << 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0);
+    for (int i = 0; i<m.size()-1;i++)
+    {   
+        Mat tmp;
+        filter2D(m[i],tmp,CV_32F,xKernel);
+        xPyr.push_back(tmp);
+        filter2D(m[i],tmp,CV_32F,yKernel);
+        yPyr.push_back(tmp);
     }
 
 }
@@ -53,10 +79,21 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
 
 int main(int argc, char **argv)
 {
-    Mat m = imread("f:/lib/opencv/samples/data/lena.jpg");
+    VideoCapture vid;
 
+
+    vid.open("C:/Users/Laurent.PC-LAURENT-VISI/Documents/Visual Studio 2013/AmplificationMouvement/baby_mp4.mp4");
+    if (vid.isOpened())
+    {
+        cout << "Video not opened!\n";
+        exit(0);
+    }
+    Mat m;
+
+    vid.read(m);
     PyramideGaussienne pg(m);
     PyramideLaplacienne pl(pg.get());
+    PyramideRiesz pr(pl.get());
 
 
     std::vector<double> pb={5,10};
