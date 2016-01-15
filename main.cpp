@@ -39,7 +39,7 @@ PyramideGaussienne::PyramideGaussienne(Mat m)
     Mat x=m;
     Mat y;
     pyr.push_back(x);
-    while (x.rows >= 4 && x.cols > 4)
+    while (x.rows >= 32 && x.cols > 32)
     {
         pyrDown(x,y);
         pyr.push_back(y);
@@ -82,8 +82,8 @@ int main(int argc, char **argv)
     VideoCapture vid;
 
 
-    vid.open("C:/Users/Laurent.PC-LAURENT-VISI/Documents/Visual Studio 2013/AmplificationMouvement/baby_mp4.mp4");
-    if (vid.isOpened())
+    vid.open("C:\\Users\\laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
+    if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
         exit(0);
@@ -91,11 +91,17 @@ int main(int argc, char **argv)
     Mat m;
 
     vid.read(m);
-    PyramideGaussienne pg(m);
-    PyramideLaplacienne pl(pg.get());
-    PyramideRiesz pr(pl.get());
+    PyramideGaussienne pgPre(m);
+    PyramideLaplacienne plPre(pgPre.get());
+    PyramideRiesz prPre(plPre.get());
 
+	while (vid.read(m))
+	{
+		PyramideGaussienne pg(m);
+		PyramideLaplacienne pl(pg.get());
+		PyramideRiesz pr(pl.get());
 
+	}
     std::vector<double> pb={5,10};
     IIRFilter f("butterworth",4,30,pb);
     cout <<  "Numerator = ";
