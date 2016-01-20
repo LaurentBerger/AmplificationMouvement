@@ -10,9 +10,25 @@ protected:
     vector<Mat> pyr;
 public :
     Pyramide(){};
+	Pyramide(Pyramide &p, bool zero);
     vector<Mat> &get(){return pyr;};
     void push_back(Mat m){ pyr.push_back(m); };
+	int size() { return pyr.size(); };
 };
+
+Pyramide::Pyramide(Pyramide &p, bool zero)
+{
+	pyr.resize(p.size());
+	for (int i = 0; i < p.size(); i++)
+	{
+		Mat m;
+		if (zero)
+			m = Mat::zeros(p.get()[i].size(), p.get()[i].type());
+		else
+			m = p.get()[i].clone();
+		pyr[i] = m;
+	}
+}
 
 class PyramideGaussienne:public Pyramide {
 public :
@@ -28,13 +44,13 @@ public :
 };
 
 class PyramideRiesz {
-vector<Mat> xPyr;
-vector<Mat> yPyr;
+Pyramide xPyr;
+Pyramide yPyr;
 public :
     PyramideRiesz(vector<Mat> &);
-    vector<Mat> &get(){return xPyr;};
-    vector<Mat> &getx(){return xPyr;};
-    vector<Mat> &gety(){return yPyr;};
+    Pyramide &get(){return xPyr;};
+    Pyramide &getx(){return xPyr;};
+    Pyramide &gety(){return yPyr;};
 
 };
 
@@ -149,7 +165,7 @@ int main(int argc, char **argv)
     VideoCapture vid;
 
 
-    vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\baby_mp4.mp4");
+    vid.open("C:\\Users\\Laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
     if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
@@ -161,14 +177,24 @@ int main(int argc, char **argv)
     PyramideGaussienne pgPre(m);
     PyramideLaplacienne plPre(pgPre.get());
     PyramideRiesz prPre(plPre.get());
+	Pyramide phaseCos( prPre.getx(), true);
+	Pyramide phaseSin(prPre,true);
+
 
 	while (vid.read(m))
 	{
 		PyramideGaussienne pgAct(m);
 		PyramideLaplacienne plAct(pgAct.get());
 		PyramideRiesz prAct(plAct.get());
-
+		// Valeur de retour 3 pyramides : DiffPaseCos DiffPhaseSinet amplitude
         vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
+		for (int i = 0; i < phaseCos.size(); i++)
+		{
+			phaseCos.get()[i] += w[0].get()[i];
+			phaseSin.get()[i] += w[1].get()[i];
+
+		}
+
 	}
     std::vector<double> pb={5,10};
     IIRFilter f("butterworth",4,30,pb);
