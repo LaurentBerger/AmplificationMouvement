@@ -12,8 +12,47 @@ public :
     Pyramide(){};
 	Pyramide(Pyramide &p, bool zero);
     vector<Mat> &get(){return pyr;};
+
     void push_back(Mat m){ pyr.push_back(m); };
 	int size() { return pyr.size(); };
+	void swap(Pyramide x)
+	{
+		pyr = x.pyr;
+	}
+	Pyramide& operator=(Pyramide x)
+	{
+		swap(x);
+		return *this;
+	}
+
+
+	Pyramide& operator+=(Pyramide& a)
+	{
+		if (pyr.size() != a.size())
+		{
+			cv::Exception e;
+			e.code = -2;
+			e.msg = "Pyramide size must be equal";
+			throw e;
+		}
+		if (pyr[0].size() != a.get()[0].size())
+		{
+			cv::Exception e;
+			e.code = -3;
+			e.msg = "level 0 size  size must be equal";
+			throw e;
+		}
+		Pyramide p(a, false);
+		for (int i = 0; i < pyr.size(); i++)
+		{
+			p.get()[i] = pyr[i] + a.get()[i];
+		}
+		return p;
+	}
+	friend Pyramide operator+(Pyramide a, const Pyramide& b)
+	{
+
+	}
 };
 
 Pyramide::Pyramide(Pyramide &p, bool zero)
@@ -139,9 +178,10 @@ vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRi
 
     for (int i = 0; i < level; i++)
     {
-        Mat qReal= plAct.get()[i].mul(plPre.get()[i]) + prAct.getx()[i].mul(prPre.getx()[i]) + prAct.gety()[i].mul(prPre.gety()[i]);
-        Mat qX= -plAct.get()[i].mul(prPre.getx()[i])+plPre.get()[i].mul(prAct.getx()[i]);
-        Mat qY= -plAct.get()[i].mul(prPre.gety()[i])+plPre.get()[i].mul(prAct.gety()[i]);
+//        Mat qReal= plAct.get()[i].mul(plPre.get()[i]) + prAct.getx()[i].mul(prPre.getx()[i]) + prAct.gety()[i].mul(prPre.gety()[i]);
+//        Mat qX= -plAct.get()[i].mul(prPre.getx()[i])+plPre.get()[i].mul(prAct.getx()[i]);
+//        Mat qY= -plAct.get()[i].mul(prPre.gety()[i])+plPre.get()[i].mul(prAct.gety()[i]);
+		Mat qX, qY,qReal;
 
         Mat num=qX.mul(qX)+qY.mul(qY);
         Mat qAmplitude;
@@ -178,7 +218,7 @@ int main(int argc, char **argv)
     PyramideLaplacienne plPre(pgPre.get());
     PyramideRiesz prPre(plPre.get());
 	Pyramide phaseCos( prPre.getx(), true);
-	Pyramide phaseSin(prPre,true);
+	Pyramide phaseSin(prPre.getx(),true);
 
 
 	while (vid.read(m))
@@ -186,7 +226,7 @@ int main(int argc, char **argv)
 		PyramideGaussienne pgAct(m);
 		PyramideLaplacienne plAct(pgAct.get());
 		PyramideRiesz prAct(plAct.get());
-		// Valeur de retour 3 pyramides : DiffPaseCos DiffPhaseSinet amplitude
+		// Valeur de retour 3 pyramides : DiffPaseCos DiffPhaseSin et amplitude
         vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
 		for (int i = 0; i < phaseCos.size(); i++)
 		{
