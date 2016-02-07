@@ -6,6 +6,8 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+    /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
+    /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
 class IIRFilter 
 {
 public :

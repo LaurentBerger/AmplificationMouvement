@@ -19,6 +19,8 @@ public :
 	{
 		pyr = x.pyr;
 	}
+
+    Mat & operator [](int i) {return pyr[i];}
 	Pyramide& operator=(Pyramide x)
 	{
 		swap(x);
@@ -178,10 +180,9 @@ vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRi
 
     for (int i = 0; i < level; i++)
     {
-//        Mat qReal= plAct.get()[i].mul(plPre.get()[i]) + prAct.getx()[i].mul(prPre.getx()[i]) + prAct.gety()[i].mul(prPre.gety()[i]);
-//        Mat qX= -plAct.get()[i].mul(prPre.getx()[i])+plPre.get()[i].mul(prAct.getx()[i]);
-//        Mat qY= -plAct.get()[i].mul(prPre.gety()[i])+plPre.get()[i].mul(prAct.gety()[i]);
-		Mat qX, qY,qReal;
+        Mat qReal= plAct.get()[i].mul(plPre.get()[i]) + prAct.getx()[i].mul(prPre.getx()[i]) + prAct.gety()[i].mul(prPre.gety()[i]);
+        Mat qX= -plAct.get()[i].mul(prPre.getx()[i])+plPre.get()[i].mul(prAct.getx()[i]);
+        Mat qY= -plAct.get()[i].mul(prPre.gety()[i])+plPre.get()[i].mul(prAct.gety()[i]);
 
         Mat num=qX.mul(qX)+qY.mul(qY);
         Mat qAmplitude;
@@ -200,12 +201,25 @@ vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRi
 return v;
 }
 
+Mat IIRtemporalFilter(IIRFilter &f, Mat phase, Mat *r0, Mat *r1)
+{
+    Mat tmp;
+    tmp = f.b[0] * phase + (*r0);
+    *r0 = f.b[1] * phase + (*r1) - f.a[1]*tmp;
+    *r1 = f.b[2] * phase  - f.a[2]*tmp;
+    return tmp;
+}
+
 int main(int argc, char **argv)
 {
+     std::vector<double> pb={5,10};
+    IIRFilter f("butterworth",1,30,pb);
+    /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
+    /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     VideoCapture vid;
 
 
-    vid.open("C:\\Users\\Laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
+    vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\baby_mp4.mp4");
     if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
@@ -219,6 +233,10 @@ int main(int argc, char **argv)
     PyramideRiesz prPre(plPre.get());
 	Pyramide phaseCos( prPre.getx(), true);
 	Pyramide phaseSin(prPre.getx(),true);
+	Pyramide r0Cos( prPre.getx(), true);
+	Pyramide r1Cos(prPre.getx(),true);
+	Pyramide r0Sin( prPre.getx(), true);
+	Pyramide r1Sin(prPre.getx(),true);
 
 
 	while (vid.read(m))
@@ -230,14 +248,16 @@ int main(int argc, char **argv)
         vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
 		for (int i = 0; i < phaseCos.size(); i++)
 		{
-			phaseCos.get()[i] += w[0].get()[i];
-			phaseSin.get()[i] += w[1].get()[i];
+			phaseCos[i] += w[0][i];
+			phaseSin[i] += w[1][i];
+            Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
+            Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
 
 		}
 
 	}
-    std::vector<double> pb={5,10};
-    IIRFilter f("butterworth",4,30,pb);
+    /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
+    /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     cout <<  "Numerator = ";
     for (int i = 0; i<f.b.size();i++)
         cout << f.b[i] << "\t";
