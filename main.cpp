@@ -173,6 +173,56 @@ Mat ArcCos(Mat m)
     return t;
 }
 
+Mat Cos(Mat m)
+{
+    if (m.depth() != CV_32F )
+    {
+        cv::Exception e;
+        e.code = -1;
+        e.msg = "Mat must be real with one channel for Cos function";
+        throw e;
+    }
+
+
+    Mat t(m.size(),CV_32FC(m.channels()));
+
+    for (int i = 0; i < m.rows; i++)
+    {
+        float *ptr1 = (float*)m.ptr(i);
+        float *ptr2 = (float*)t.ptr(i);
+        for (int j=0;j<m.cols*m.channels();j++,ptr1++,ptr2++)
+            *ptr2 = cos(*ptr1);
+    }
+
+    return t;
+}
+
+Mat Sin(Mat m)
+{
+    if (m.depth() != CV_32F )
+    {
+        cv::Exception e;
+        e.code = -1;
+        e.msg = "Mat must be real with one channel for Cos function";
+        throw e;
+    }
+
+
+    Mat t(m.size(),CV_32FC(m.channels()));
+
+    for (int i = 0; i < m.rows; i++)
+    {
+        float *ptr1 = (float*)m.ptr(i);
+        float *ptr2 = (float*)t.ptr(i);
+        for (int j=0;j<m.cols*m.channels();j++,ptr1++,ptr2++)
+            *ptr2 = sin(*ptr1);
+    }
+
+    return t;
+}
+
+
+
 vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRiesz &prAct, PyramideLaplacienne &plPre, PyramideRiesz &prPre )
 {
     int level=prAct.get().size();
@@ -226,9 +276,21 @@ return m;
 }
 
 
-Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel, Mat phasemagnifiedCos, Mat phaseMaginifiedSin)
+Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel, Mat phaseMagnifiedCos, Mat phaseMagnifiedSin)
 {
     Mat r;
+    Mat pm,expPhaseReal,expPhaseImag;
+    Mat expphix,expphiy,tmp;
+
+    sqrt(phaseMagnifiedCos.mul(phaseMagnifiedCos)+phaseMagnifiedSin.mul(phaseMagnifiedSin),pm);
+    expPhaseReal = Cos(pm);
+    expPhaseImag = Sin(pm);
+    divide(expPhaseImag,pm,tmp);
+    expphix = phaseMagnifiedCos.mul(tmp);
+    expphiy = phaseMagnifiedSin.mul(tmp);
+
+    r = expPhaseReal.mul(rieszXLevel)-expphix.mul(laplevel)-expphiy.mul(rieszYLevel);
+
     return r;
 }
 
@@ -269,6 +331,7 @@ int main(int argc, char **argv)
 		PyramideGaussienne pgAct(m);
 		PyramideLaplacienne plAct(pgAct.get());
 		PyramideRiesz prAct(plAct.get());
+		Pyramide prMotionmaginfiedLap(plAct);
         Mat amplitude;
 		// Valeur de retour 2 pyramides : DiffPaseCos DiffPhaseSin et amplitude
         vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
@@ -286,9 +349,13 @@ int main(int argc, char **argv)
 
             phaseMagnifiedFilteredCos = amplificationfactor*phaseFilterdCos;
             phaseMagnifiedFilteredSin = amplificationfactor*phaseFilterdSin;
-
+            prMotionmaginfiedLap[i]=PhaseShiftCoefficientRealPart(plAct[i], prAct.getx()[i], prAct.gety()[i], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
 
 		}
+        prMotionmaginfiedLap[phaseCos.size()] = plAct[phaseCos.size()];
+        plPre=plAct;
+        prPre=prAct;
+
 
 	}
     /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
