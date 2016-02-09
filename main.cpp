@@ -173,7 +173,7 @@ Mat ArcCos(Mat m)
     return t;
 }
 
-vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRiesz &prAct, PyramideLaplacienne &plPre, PyramideRiesz &prPre)
+vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRiesz &prAct, PyramideLaplacienne &plPre, PyramideRiesz &prPre )
 {
     int level=prAct.get().size();
     vector<Pyramide> v(3);
@@ -192,6 +192,7 @@ vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRi
         Mat sinAngle=qY/num;
         Mat diffPhaseCos=diffPhase.mul(cosAngle);
         Mat diffPhaseSin=diffPhase.mul(sinAngle);
+       
         Mat amplitude;
         sqrt(qAmplitude,amplitude);
         v[0].push_back(diffPhaseCos);
@@ -210,6 +211,27 @@ Mat IIRtemporalFilter(IIRFilter &f, Mat phase, Mat *r0, Mat *r1)
     return tmp;
 }
 
+
+Mat AmplitudeWeightedblur(Mat img,Mat weighted,Mat kernel)
+{
+Mat num,den;
+Mat m;
+
+
+sepFilter2D(weighted,den,CV_32F,kernel,kernel);
+multiply(img,weighted,m);
+sepFilter2D(m,num,CV_32F,kernel,kernel);
+divide(num,den,m);
+return m;
+}
+
+
+Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel, Mat phasemagnifiedCos, Mat phaseMaginifiedSin)
+{
+    Mat r;
+    return r;
+}
+
 int main(int argc, char **argv)
 {
      std::vector<double> pb={5,10};
@@ -217,7 +239,7 @@ int main(int argc, char **argv)
     /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
     /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     VideoCapture vid;
-
+    double amplificationfactor=0.1;
 
     vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\baby_mp4.mp4");
     if (!vid.isOpened())
@@ -237,14 +259,18 @@ int main(int argc, char **argv)
 	Pyramide r1Cos(prPre.getx(),true);
 	Pyramide r0Sin( prPre.getx(), true);
 	Pyramide r1Sin(prPre.getx(),true);
+	Pyramide motionMagnified(prPre.getx());
+    Mat kernel;
 
+    kernel = getGaussianKernel(2,-1);
 
 	while (vid.read(m))
 	{
 		PyramideGaussienne pgAct(m);
 		PyramideLaplacienne plAct(pgAct.get());
 		PyramideRiesz prAct(plAct.get());
-		// Valeur de retour 3 pyramides : DiffPaseCos DiffPhaseSin et amplitude
+        Mat amplitude;
+		// Valeur de retour 2 pyramides : DiffPaseCos DiffPhaseSin et amplitude
         vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
 		for (int i = 0; i < phaseCos.size(); i++)
 		{
@@ -252,6 +278,15 @@ int main(int argc, char **argv)
 			phaseSin[i] += w[1][i];
             Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
             Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
+
+            phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[0][i],kernel);
+            phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[0][i],kernel);
+            Mat phaseMagnifiedFilteredCos;
+            Mat phaseMagnifiedFilteredSin;
+
+            phaseMagnifiedFilteredCos = amplificationfactor*phaseFilterdCos;
+            phaseMagnifiedFilteredSin = amplificationfactor*phaseFilterdSin;
+
 
 		}
 
