@@ -126,8 +126,9 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
 
 Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
 {
-    Mat y;
-    gauss[ pyr.size()].convertTo(y,CV_32F);
+    Mat x,y;
+
+    gauss[ gauss.size()-1].convertTo(y,CV_32F);
     for (int i = pyr.size()-1; i>=0;i--)
     {   
         pyrUp(y,y);
@@ -138,8 +139,8 @@ Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
 
 PyramideRiesz::PyramideRiesz(vector<Mat> &m)
 {
-    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, -0.5, 0, 0.5, 0, 0, 0);
-    Mat yKernel=(Mat_<float>(3,3) << 0, -0.5, 0, 0, 0, 0, 0, 0.5, 0);
+    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
+    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
     for (int i = 0; i<m.size()-1;i++)
     {   
         Mat tmp;
@@ -236,31 +237,31 @@ Mat Sin(Mat m)
 
 
 
-vector<Pyramide> DifferencePhaseAmplitude(PyramideLaplacienne &plAct, PyramideRiesz &prAct, PyramideLaplacienne &plPre, PyramideRiesz &prPre )
+vector<Mat> DifferencePhaseAmplitude(Mat &c_real, Mat &cRzX, Mat &cRzY, Mat &p_real, Mat &pRzX, Mat &pRzY )
 {
-    int level=prAct.get().size();
-    vector<Pyramide> v(3);
+    vector<Mat> v(3);
 
-    for (int i = 0; i < level; i++)
     {
-        Mat qReal= plAct.get()[i].mul(plPre.get()[i]) + prAct.getx()[i].mul(prPre.getx()[i]) + prAct.gety()[i].mul(prPre.gety()[i]);
-        Mat qX= -plAct.get()[i].mul(prPre.getx()[i])+plPre.get()[i].mul(prAct.getx()[i]);
-        Mat qY= -plAct.get()[i].mul(prPre.gety()[i])+plPre.get()[i].mul(prAct.gety()[i]);
+        Mat qReal=c_real.mul(p_real) + cRzX.mul(pRzX) + cRzY.mul(pRzY);
+        Mat qX= -c_real.mul(pRzX)+p_real.mul(cRzX);
+        Mat qY= -c_real.mul(pRzY)+p_real.mul(cRzY);
 
         Mat num=qX.mul(qX)+qY.mul(qY);
         Mat qAmplitude;
         sqrt(qReal.mul(qReal)+num,qAmplitude);
         Mat diffPhase = ArcCos(qReal/qAmplitude);
-        Mat cosAngle=qX/num;
-        Mat sinAngle=qY/num;
+        Mat cosAngle;
+        Mat sinAngle;
+        divide(qX,num,cosAngle);
+        divide(qY,num,sinAngle);
         Mat diffPhaseCos=diffPhase.mul(cosAngle);
         Mat diffPhaseSin=diffPhase.mul(sinAngle);
        
         Mat amplitude;
         sqrt(qAmplitude,amplitude);
-        v[0].push_back(diffPhaseCos);
-        v[1].push_back(diffPhaseSin);
-        v[2].push_back(amplitude);
+        v[0]=diffPhaseCos;
+        v[1]=diffPhaseSin;
+        v[2]=amplitude;
     }
 return v;
 }
@@ -305,21 +306,23 @@ Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel
     expphix = phaseMagnifiedCos.mul(tmp);
     expphiy = phaseMagnifiedSin.mul(tmp);
 
-    r = expPhaseReal.mul(rieszXLevel)-expphix.mul(laplevel)-expphiy.mul(rieszYLevel);
+    r = expPhaseReal.mul(laplevel)-expphix.mul(rieszXLevel)-expphiy.mul(rieszYLevel);
 
     return r;
 }
 
 int main(int argc, char **argv)
 {
-     std::vector<double> pb={0,14};
-    IIRFilter f("butterworth",1,30,pb);
+    // std::vector<double> pb={0,0.6};
+     std::vector<double> pb={36,62};
+    IIRFilter f("butterworth",1,300,pb);
     /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
     /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     VideoCapture vid;
-    double amplificationfactor=0;
+    VideoWriter vidWrite;
+    double amplificationfactor=60;
 
-    vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\baby_mp4.mp4");
+    vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\camera.avi");
     if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
@@ -328,6 +331,7 @@ int main(int argc, char **argv)
     Mat m;
 
     vid.read(m);
+    vidWrite.open("write.avi",CV_FOURCC('M','J','P','G'),30,m.size());
     PyramideGaussienne pgPre(m);
     PyramideLaplacienne plPre(pgPre.get());
     PyramideRiesz prPre(plPre.get());
@@ -340,8 +344,8 @@ int main(int argc, char **argv)
 	Pyramide motionMagnified(prPre.getx());
     Mat kernel;
 
-    kernel = getGaussianKernel(2,-1);
-
+    kernel = getGaussianKernel(5,2);
+    int numLevels = plPre.size()-1;
 	while (vid.read(m))
 	{
 		PyramideGaussienne pgAct(m);
@@ -349,17 +353,16 @@ int main(int argc, char **argv)
 		PyramideRiesz prAct(plAct.get());
 		PyramideLaplacienne prMotionMagnifiedLap(plAct);
         Mat amplitude;
-		// Valeur de retour 2 pyramides : DiffPaseCos DiffPhaseSin et amplitude
-        vector<Pyramide> w=DifferencePhaseAmplitude(plAct,prAct,plPre,prPre);
-		for (int i = 0; i < phaseCos.size(); i++)
+		for (int i = 0; i < numLevels; i++)
 		{
-			phaseCos[i] += w[0][i];
-			phaseSin[i] += w[1][i];
+            vector<Mat> w=DifferencePhaseAmplitude(plAct[i],prAct.getx()[i],prAct.gety()[i],plPre[i],prPre.getx()[i],prPre.gety()[i]);
+			phaseCos[i] += w[0];
+			phaseSin[i] += w[1];
             Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
             Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
 
-            phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[0][i],kernel);
-            phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[0][i],kernel);
+            phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[2],kernel);
+            phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[2],kernel);
             Mat phaseMagnifiedFilteredCos;
             Mat phaseMagnifiedFilteredSin;
 
@@ -368,6 +371,7 @@ int main(int argc, char **argv)
             prMotionMagnifiedLap[i]=PhaseShiftCoefficientRealPart(plAct[i], prAct.getx()[i], prAct.gety()[i], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
 
 		}
+        prMotionMagnifiedLap[numLevels]=plAct[numLevels];
         Mat x = prMotionMagnifiedLap.Collpase(pgAct);
         vector<Mat> sx;
         split(x,sx);
@@ -381,6 +385,7 @@ int main(int argc, char **argv)
         Mat uc;
         x.convertTo(uc,CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
         imshow("Laplacian Motion",uc);
+        vidWrite << uc;
         waitKey(5);
         cout << vid.get(CAP_PROP_POS_MSEC)<<endl;
         prMotionMagnifiedLap[phaseCos.size()] = plAct[phaseCos.size()];
