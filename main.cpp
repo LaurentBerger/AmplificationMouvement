@@ -7,6 +7,26 @@ using namespace cv;
 
 #define MIN_ROW_COL_PYRAMID 32
 
+void DisplayImage(Mat x,string s)
+{
+	return;
+	vector<Mat> sx;
+	split(x, sx);
+	vector<double> minVal(3), maxVal(3);
+	for (int i = 0; i < sx.size(); i++)
+	{
+		minMaxLoc(sx[i], &minVal[i], &maxVal[i]);
+
+	}
+	maxVal[0] = *max_element(maxVal.begin(), maxVal.end());
+	minVal[0] = *min_element(minVal.begin(), minVal.end());
+	Mat uc;
+	x.convertTo(uc, CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
+	imshow(s, uc);
+	waitKey(); 
+
+}
+
 class Pyramide {
 protected:
     vector<Mat> pyr;
@@ -153,12 +173,23 @@ PyramideLaplacienne::PyramideLaplacienne(Mat &m)
         filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
         pyr.push_back(tmpHigh);
         filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
-        Mat x=tmpLow+tmpHigh;
-        resize(tmpLow,tmp,Size(tmpLow.cols/2,tmpLow.rows/2));
-/*        Mat uc;
-        x.convertTo(uc,CV_8U);
-        imshow("lap",uc);
-        waitKey();*/
+/*        Mat x=tmpLow+tmpHigh;
+		vector<Mat> sx;
+		split(x, sx);
+		vector<double> minVal(3), maxVal(3);
+		for (int i = 0; i < sx.size(); i++)
+		{
+			minMaxLoc(sx[i], &minVal[i], &maxVal[i]);
+
+		}
+		maxVal[0] = *max_element(maxVal.begin(), maxVal.end());
+		minVal[0] = *min_element(minVal.begin(), minVal.end());
+		Mat uc;
+		x.convertTo(uc,CV_8U);
+		imshow("lap",uc);
+		waitKey();*/
+		resize(tmpLow,tmp,Size(tmpLow.cols/2,tmpLow.rows/2));
+//		pyrDown(tmpLow,tmp);
     }
     pyr.push_back(tmp);
 }
@@ -203,15 +234,15 @@ void PyramideLaplacienne::InitFilters()
 	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
 	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
 	                                    -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001);
-    highPassFilter = (Mat_<float>(9,9)<<    0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000,
-	                                        0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
-	                                        0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
-	                                        0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
-	                                        0.0027,   0.0123,   0.0292,   0.0469,  -0.9455,   0.0469,   0.0292,   0.0123,   0.0027,
-	                                        0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
-	                                        0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
-	                                        0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
-	                                        0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000);
+    highPassFilter=(Mat_<float>(9,9)<<   0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000,
+	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                     0.0027,   0.0123,   0.0292,   0.0469,  -0.9455,   0.0469,   0.0292,   0.0123,   0.0027,
+	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                     0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000);
 }
 
 
@@ -220,15 +251,19 @@ void PyramideLaplacienne::InitFilters()
 PyramideRiesz::PyramideRiesz(vector<Mat> &m)
 {
 
-    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
-    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
-    for (int i = 0; i<m.size()-1;i++)
+	//    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
+	//    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
+	    Mat yKernel=(Mat_<float>(3,3) << -0.12, -0.34, -0.12, 0,0,0, 0.12, 0.34, 0.12);
+	    Mat xKernel=yKernel.t();
+
+		cout << xKernel << yKernel << endl;
+	for (int i = 0; i<m.size()-1;i++)
     {   
-        Mat tmp;
-        filter2D(m[i],tmp,CV_32F,xKernel);
-        xPyr.push_back(tmp);
-        filter2D(m[i],tmp,CV_32F,yKernel);
-        yPyr.push_back(tmp);
+        Mat tmp1,tmp2;
+        filter2D(m[i],tmp1,CV_32F,xKernel);
+        xPyr.push_back(tmp1);
+		filter2D(m[i],tmp2,CV_32F,yKernel);
+        yPyr.push_back(tmp2);
     }
 
 }
@@ -330,7 +365,9 @@ vector<Mat> DifferencePhaseAmplitude(Mat &c_real, Mat &cRzX, Mat &cRzY, Mat &p_r
         Mat num=qX.mul(qX)+qY.mul(qY);
         Mat qAmplitude;
         sqrt(qReal.mul(qReal)+num,qAmplitude);
-        Mat diffPhase = ArcCos(qReal/qAmplitude);
+		Mat ratio;
+		divide(qReal, qAmplitude, ratio);
+        Mat diffPhase = ArcCos(ratio);
         Mat cosAngle;
         Mat sinAngle;
         divide(qX,num,cosAngle);
@@ -343,7 +380,10 @@ vector<Mat> DifferencePhaseAmplitude(Mat &c_real, Mat &cRzX, Mat &cRzY, Mat &p_r
         v[0]=diffPhaseCos;
         v[1]=diffPhaseSin;
         v[2]=amplitude;
-    }
+		DisplayImage(c_real, "phasecos");
+		DisplayImage(cRzX, "phaseSion");
+		DisplayImage(cRzY, "p");
+	}
 return v;
 }
 
@@ -399,9 +439,10 @@ Mat PyramideLaplacienne::highPassFilter;
 
 int main(int argc, char **argv)
 {
-    {
-    Mat m(512,512,CV_32FC1);
-    float pi = acos(-1);
+	if (0==1)
+	{
+		Mat m = imread("c:/lib/opencv/samples/data/lena.jpg",CV_LOAD_IMAGE_GRAYSCALE);// (512, 512, CV_32FC1);
+/*    float pi = acos(-1);
     for (int i = 0; i < m.rows; i++)
     {
         float *ptf = (float*)m.ptr(i);
@@ -414,7 +455,7 @@ int main(int argc, char **argv)
             else
                 *ptf=128;
         }
-    }
+    }*/
     Mat uc;
     m.convertTo(uc,CV_8U,1);
     imshow("wave",uc);
@@ -435,8 +476,9 @@ int main(int argc, char **argv)
     VideoWriter vidWrite;
     double amplificationfactor=1;
 
-    vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\camera.avi");
-    if (!vid.isOpened())
+//	vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\camera.avi");
+	vid.open("C:\\Users\\Laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
+	if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
         exit(0);
@@ -445,9 +487,9 @@ int main(int argc, char **argv)
 
     vid.read(m);
     vidWrite.open("write.avi",CV_FOURCC('M','J','P','G'),30,m.size());
-    PyramideGaussienne pgPre(m);
+    //PyramideGaussienne pgPre(m);
     PyramideLaplacienne plPre(m);
-
+	if (0==1)
     {
         Mat x = plPre.Collpase();
         vector<Mat> sx;
@@ -475,31 +517,31 @@ int main(int argc, char **argv)
 	Pyramide motionMagnified(prPre.getx());
     Mat kernel;
 
-    kernel = getGaussianKernel(3,-1);
+	kernel = Mat::ones(1, 1, CV_32F);// getGaussianKernel(3, -1);
     int numLevels = plPre.size()-1;
 	while (vid.read(m))
 	{
-//		PyramideGaussienne pgAct(m);
 		PyramideLaplacienne plAct(m);
 		PyramideRiesz prAct(plAct.get());
 		PyramideLaplacienne prMotionMagnifiedLap(plAct);
-        Mat amplitude;
 		for (int i = 0; i < numLevels; i++)
 		{
             vector<Mat> w=DifferencePhaseAmplitude(plAct[i],prAct.getx()[i],prAct.gety()[i],plPre[i],prPre.getx()[i],prPre.gety()[i]);
 			phaseCos[i] += w[0];
 			phaseSin[i] += w[1];
-            Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
-            Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
+			Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
+			Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
+			//Mat phaseFilterdCos=phaseCos[i];
+			//Mat phaseFilterdSin=phaseSin[i];
 
             phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[2],kernel);
             phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[2],kernel);
             Mat phaseMagnifiedFilteredCos;
             Mat phaseMagnifiedFilteredSin;
 
-            phaseMagnifiedFilteredCos = amplificationfactor*phaseFilterdCos;
-            phaseMagnifiedFilteredSin = amplificationfactor*phaseFilterdSin;
-            prMotionMagnifiedLap[i]=PhaseShiftCoefficientRealPart(plAct[i], prAct.getx()[i], prAct.gety()[i], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
+			phaseMagnifiedFilteredCos = amplificationfactor*phaseFilterdCos;
+			phaseMagnifiedFilteredSin = amplificationfactor*phaseFilterdSin;
+			prMotionMagnifiedLap[i]=PhaseShiftCoefficientRealPart(plAct[i], prAct.getx()[i], prAct.gety()[i], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
 
 		}
         prMotionMagnifiedLap[numLevels]=plAct[numLevels];
