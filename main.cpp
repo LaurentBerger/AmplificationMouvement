@@ -5,6 +5,8 @@
 using namespace std;
 using namespace cv;
 
+#define MIN_ROW_COL_PYRAMID 32
+
 class Pyramide {
 protected:
     vector<Mat> pyr;
@@ -78,21 +80,32 @@ public :
 };
 
 class PyramideLaplacienne:public Pyramide {
+static Mat lowPassFilter;
+static Mat highPassFilter;
+
+    void InitFilters();
+
 public :
     PyramideLaplacienne(vector<Mat> &);
+    PyramideLaplacienne(Mat &); // construct Laplacian pyramid using http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
     Mat Collpase(Pyramide &gauss);
+    Mat Collpase();
     vector<Mat> &get(){return pyr;};
 
 };
 
 class PyramideRiesz {
-Pyramide xPyr;
-Pyramide yPyr;
-public :
-    PyramideRiesz(vector<Mat> &);
-    Pyramide &get(){return xPyr;};
-    Pyramide &getx(){return xPyr;};
-    Pyramide &gety(){return yPyr;};
+
+    Pyramide xPyr;
+    Pyramide yPyr;
+
+
+
+    public :
+        PyramideRiesz(vector<Mat> &); // construct Riesz pyramid using laplacian pyramid
+        Pyramide &get(){return xPyr;};
+        Pyramide &getx(){return xPyr;};
+        Pyramide &gety(){return yPyr;};
 
 };
 
@@ -102,7 +115,7 @@ PyramideGaussienne::PyramideGaussienne(Mat m):Pyramide()
     Mat x=m;
     Mat y;
     pyr.push_back(x);
-    while (x.rows >= 32 && x.cols > 32)
+    while (x.rows >= MIN_ROW_COL_PYRAMID && x.cols > MIN_ROW_COL_PYRAMID)
     {
         pyrDown(x,y);
         pyr.push_back(y);
@@ -121,7 +134,33 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
         subtract(m[i-1],tmp1,tmp2,noArray(),CV_32F);
         pyr.push_back(tmp2);
     }
+    pyr.push_back(m[m.size()-1]);
 
+}
+
+
+PyramideLaplacienne::PyramideLaplacienne(Mat &m)
+{
+    if (lowPassFilter.empty())
+        InitFilters();
+
+    
+    Mat tmpLow,tmpHigh;
+    Mat tmp=m;
+    while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
+
+    {   
+        filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
+        pyr.push_back(tmpHigh);
+        filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
+        Mat x=tmpLow+tmpHigh;
+        resize(tmpLow,tmp,Size(tmpLow.cols/2,tmpLow.rows/2));
+/*        Mat uc;
+        x.convertTo(uc,CV_8U);
+        imshow("lap",uc);
+        waitKey();*/
+    }
+    pyr.push_back(tmp);
 }
 
 Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
@@ -137,8 +176,50 @@ Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
     return y;
 }
 
+Mat PyramideLaplacienne::Collpase()
+{
+    Mat x,y;
+
+    y = pyr[pyr.size()-1];
+    for (int i = pyr.size()-2; i>=0;i--)
+    {   
+        pyrUp(y,y);
+        add(y,pyr[i],y);
+    }
+    return y;
+}
+
+
+
+void PyramideLaplacienne::InitFilters()
+{
+    // Supplemental for Riesz Pyramid for Fast Phase-Based Video Magnification 
+    lowPassFilter = (Mat_<float>(9,9)<< -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001,
+	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
+	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
+	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
+	                                    -0.0057,   -0.0003,   0.0387,   0.0910,   0.1138,   0.0910,   0.0387,  -0.0003,  -0.0057,
+	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
+	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
+	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
+	                                    -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001);
+    highPassFilter = (Mat_<float>(9,9)<<    0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000,
+	                                        0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                        0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                        0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                        0.0027,   0.0123,   0.0292,   0.0469,  -0.9455,   0.0469,   0.0292,   0.0123,   0.0027,
+	                                        0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                        0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                        0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                        0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000);
+}
+
+
+
+
 PyramideRiesz::PyramideRiesz(vector<Mat> &m)
 {
+
     Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
     Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
     for (int i = 0; i<m.size()-1;i++)
@@ -311,16 +392,48 @@ Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel
     return r;
 }
 
+Mat PyramideLaplacienne::lowPassFilter;
+Mat PyramideLaplacienne::highPassFilter;
+
+
+
 int main(int argc, char **argv)
 {
+    {
+    Mat m(512,512,CV_32FC1);
+    float pi = acos(-1);
+    for (int i = 0; i < m.rows; i++)
+    {
+        float *ptf = (float*)m.ptr(i);
+        for (int j = 0; j < m.cols; j++,ptf++)
+        {
+            double r = (i - 256)*(i - 256) + (j - 256)*(j-256);
+            r = sqrt(r);
+            if (r>=100 && r<120)
+                *ptf=255;
+            else
+                *ptf=128;
+        }
+    }
+    Mat uc;
+    m.convertTo(uc,CV_8U,1);
+    imshow("wave",uc);
+    PyramideGaussienne pgPre(m);
+    PyramideLaplacienne plPre(m);
+    PyramideRiesz prPre(plPre.get());
+    imshow("riesz",prPre.getx()[0]);
+    waitKey();
+    }
+
+
     // std::vector<double> pb={0,0.6};
-     std::vector<double> pb={36,62};
+     std::vector<double> pb={0,100};
     IIRFilter f("butterworth",1,300,pb);
     /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
     /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     VideoCapture vid;
     VideoWriter vidWrite;
-    double amplificationfactor=60;
+    double amplificationfactor=1;
 
     vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\camera.avi");
     if (!vid.isOpened())
@@ -333,7 +446,25 @@ int main(int argc, char **argv)
     vid.read(m);
     vidWrite.open("write.avi",CV_FOURCC('M','J','P','G'),30,m.size());
     PyramideGaussienne pgPre(m);
-    PyramideLaplacienne plPre(pgPre.get());
+    PyramideLaplacienne plPre(m);
+
+    {
+        Mat x = plPre.Collpase();
+        vector<Mat> sx;
+        split(x,sx);
+        imshow("video",m);
+        vector<double> minVal(3), maxVal(3);
+        minMaxLoc(sx[0],&minVal[0],&maxVal[0]);
+        minMaxLoc(sx[1],&minVal[1],&maxVal[1]);
+        minMaxLoc(sx[2],&minVal[2],&maxVal[2]);
+        maxVal[0] = *max_element(maxVal.begin(),maxVal.end());
+        minVal[0] = *min_element(minVal.begin(),minVal.end());
+        Mat uc;
+        x.convertTo(uc,CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
+        imshow("Laplacian Motion",uc);
+        waitKey();
+    }
+
     PyramideRiesz prPre(plPre.get());
 	Pyramide phaseCos( prPre.getx(), true);
 	Pyramide phaseSin(prPre.getx(),true);
@@ -344,12 +475,12 @@ int main(int argc, char **argv)
 	Pyramide motionMagnified(prPre.getx());
     Mat kernel;
 
-    kernel = getGaussianKernel(5,2);
+    kernel = getGaussianKernel(3,-1);
     int numLevels = plPre.size()-1;
 	while (vid.read(m))
 	{
-		PyramideGaussienne pgAct(m);
-		PyramideLaplacienne plAct(pgAct.get());
+//		PyramideGaussienne pgAct(m);
+		PyramideLaplacienne plAct(m);
 		PyramideRiesz prAct(plAct.get());
 		PyramideLaplacienne prMotionMagnifiedLap(plAct);
         Mat amplitude;
@@ -372,7 +503,7 @@ int main(int argc, char **argv)
 
 		}
         prMotionMagnifiedLap[numLevels]=plAct[numLevels];
-        Mat x = prMotionMagnifiedLap.Collpase(pgAct);
+        Mat x = prMotionMagnifiedLap.Collpase();
         vector<Mat> sx;
         split(x,sx);
         imshow("video",m);
