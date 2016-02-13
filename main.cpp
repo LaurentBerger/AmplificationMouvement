@@ -9,7 +9,7 @@ using namespace cv;
 
 void DisplayImage(Mat x,string s)
 {
-	return;
+    return;
 	vector<Mat> sx;
 	split(x, sx);
 	vector<double> minVal(3), maxVal(3);
@@ -21,7 +21,7 @@ void DisplayImage(Mat x,string s)
 	maxVal[0] = *max_element(maxVal.begin(), maxVal.end());
 	minVal[0] = *min_element(minVal.begin(), minVal.end());
 	Mat uc;
-	x.convertTo(uc, CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
+	x.convertTo(uc, CV_8U,255/(maxVal[0]-minVal[0]),-0*minVal[0]/(maxVal[0]-minVal[0]));
 	imshow(s, uc);
 	waitKey(); 
 
@@ -154,7 +154,9 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
         subtract(m[i-1],tmp1,tmp2,noArray(),CV_32F);
         pyr.push_back(tmp2);
     }
-    pyr.push_back(m[m.size()-1]);
+    Mat x;
+    m[m.size() - 1].convertTo(x,CV_32F);
+    pyr.push_back(x);
 
 }
 
@@ -165,31 +167,15 @@ PyramideLaplacienne::PyramideLaplacienne(Mat &m)
         InitFilters();
 
     
-    Mat tmpLow,tmpHigh;
     Mat tmp=m;
     while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
 
     {   
+    Mat tmpLow,tmpHigh;
         filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
         pyr.push_back(tmpHigh);
         filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
-/*        Mat x=tmpLow+tmpHigh;
-		vector<Mat> sx;
-		split(x, sx);
-		vector<double> minVal(3), maxVal(3);
-		for (int i = 0; i < sx.size(); i++)
-		{
-			minMaxLoc(sx[i], &minVal[i], &maxVal[i]);
-
-		}
-		maxVal[0] = *max_element(maxVal.begin(), maxVal.end());
-		minVal[0] = *min_element(minVal.begin(), minVal.end());
-		Mat uc;
-		x.convertTo(uc,CV_8U);
-		imshow("lap",uc);
-		waitKey();*/
-		resize(tmpLow,tmp,Size(tmpLow.cols/2,tmpLow.rows/2));
-//		pyrDown(tmpLow,tmp);
+		resize(tmpLow,tmp,Size(),0.5,0.5);
     }
     pyr.push_back(tmp);
 }
@@ -198,8 +184,8 @@ Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
 {
     Mat x,y;
 
-    gauss[ gauss.size()-1].convertTo(y,CV_32F);
-    for (int i = pyr.size()-1; i>=0;i--)
+   y=pyr[pyr.size()-1];
+    for (int i = pyr.size()-2; i>=0;i--)
     {   
         pyrUp(y,y);
         add(y,pyr[i],y);
@@ -210,14 +196,30 @@ Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
 Mat PyramideLaplacienne::Collpase()
 {
     Mat x,y;
+    if (lowPassFilter.rows == 0)
+    {
+        y = pyr[pyr.size()-1];
+        for (int i = pyr.size()-2; i>=0;i--)
+        {   
+            pyrUp(y,x);
+            add(x,pyr[i],y);
+        }
+        return y;
 
-    y = pyr[pyr.size()-1];
-    for (int i = pyr.size()-2; i>=0;i--)
-    {   
-        pyrUp(y,y);
-        add(y,pyr[i],y);
     }
-    return y;
+    else
+    {
+        y = pyr[pyr.size()-1];
+        for (int i = pyr.size()-2; i>=0;i--)
+        {   
+            Mat tmp1,tmp2;
+            resize(y,x,Size(),2,2,CV_INTER_NN);//pyrUp(y,x);
+            filter2D(x,tmp1,CV_32F,lowPassFilter);
+            filter2D(pyr[i],tmp2,CV_32F,highPassFilter);
+            add(tmp1,tmp2,y);
+        }
+        return y;
+    }
 }
 
 
@@ -251,12 +253,11 @@ void PyramideLaplacienne::InitFilters()
 PyramideRiesz::PyramideRiesz(vector<Mat> &m)
 {
 
-	//    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
-	//    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
-	    Mat yKernel=(Mat_<float>(3,3) << -0.12, -0.34, -0.12, 0,0,0, 0.12, 0.34, 0.12);
-	    Mat xKernel=yKernel.t();
+	    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
+	    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
+	//    Mat yKernel=(Mat_<float>(3,3) << -0.12, -0.34, -0.12, 0,0,0, 0.12, 0.34, 0.12);
+	//    Mat xKernel=yKernel.t();
 
-		cout << xKernel << yKernel << endl;
 	for (int i = 0; i<m.size()-1;i++)
     {   
         Mat tmp1,tmp2;
@@ -387,28 +388,28 @@ vector<Mat> DifferencePhaseAmplitude(Mat &c_real, Mat &cRzX, Mat &cRzY, Mat &p_r
 return v;
 }
 
-Mat IIRtemporalFilter(IIRFilter &f, Mat phase, Mat *r0, Mat *r1)
+Mat IIRtemporalFilter(IIRFilter &f, Mat phase, vector<Mat> ri)
 {
     Mat tmp;
-    tmp = f.b[0] * phase + (*r0);
-    *r0 = f.b[1] * phase + (*r1) - f.a[1]*tmp;
-    if (f.b.size()==3)
-        *r1 = f.b[2] * phase  - f.a[2]*tmp;
-    else
-        *r1 = 0;
+    tmp = f.b[0] * phase + (ri[0]);
+    ri[0] = f.b[1] * phase + (ri[1]) - f.a[1]*tmp;
+    if (f.n==1 && f.b.size()>2)
+        ri[1] = f.b[2] * phase  - f.a[2]*tmp;
+    else 
+        ri[1] = 0;
     return tmp;
 }
 
 
-Mat AmplitudeWeightedblur(Mat img,Mat weighted,Mat kernel)
+Mat AmplitudeWeightedblur(Mat img,Mat weighted,Mat kernelx,Mat kernely)
 {
 Mat num,den;
 Mat m;
 
 
-sepFilter2D(weighted,den,CV_32F,kernel,kernel);
+sepFilter2D(weighted,den,CV_32F,kernelx,kernely);
 multiply(img,weighted,m);
-sepFilter2D(m,num,CV_32F,kernel,kernel);
+sepFilter2D(m,num,CV_32F,kernelx,kernely);
 divide(num,den,m);
 return m;
 }
@@ -439,73 +440,53 @@ Mat PyramideLaplacienne::highPassFilter;
 
 int main(int argc, char **argv)
 {
-	if (0==1)
+
+	if (1==1)
 	{
-		Mat m = imread("c:/lib/opencv/samples/data/lena.jpg",CV_LOAD_IMAGE_GRAYSCALE);// (512, 512, CV_32FC1);
-/*    float pi = acos(-1);
-    for (int i = 0; i < m.rows; i++)
-    {
-        float *ptf = (float*)m.ptr(i);
-        for (int j = 0; j < m.cols; j++,ptf++)
+        std::vector<double> pb={36,62};
+        IIRFilter f("butterworth",1,300,pb);
+        Mat x=(Mat_<float>(1,1) << 1);
+        Mat x0=(Mat_<float>(1,1) << 0);
+        Mat x1=(Mat_<float>(1,1) << 0);
+        vector<Mat> ri = {x0,x1};
+
+        Mat y;
+        for (int i = 2; i < 20; i++)
         {
-            double r = (i - 256)*(i - 256) + (j - 256)*(j-256);
-            r = sqrt(r);
-            if (r>=100 && r<120)
-                *ptf=255;
-            else
-                *ptf=128;
+            y=IIRtemporalFilter(f,x,ri);
+            cout<<"x ="<<x<<" y="<<y<<endl;
+            x=(Mat_<float>(1,1) << float(i));
+
         }
-    }*/
-    Mat uc;
-    m.convertTo(uc,CV_8U,1);
-    imshow("wave",uc);
-    PyramideGaussienne pgPre(m);
-    PyramideLaplacienne plPre(m);
-    PyramideRiesz prPre(plPre.get());
-    imshow("riesz",prPre.getx()[0]);
-    waitKey();
+
     }
 
 
-    // std::vector<double> pb={0,0.6};
-     std::vector<double> pb={0,100};
-    IIRFilter f("butterworth",1,300,pb);
+     std::vector<double> pb={0,0.6};
+     std::vector<double> pb2={0,5.7};
+    IIRFilter f("butterworth",1,30,pb);
+    IIRFilter f2("butterworth",1,30,pb2);
+   // IIRFilter f("butterworth",1,30,pb);
     /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
     /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
     VideoCapture vid;
     VideoWriter vidWrite;
-    double amplificationfactor=1;
+    double amplificationfactor=60;
 
+	vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\baby_mp4.mp4");
 //	vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\camera.avi");
-	vid.open("C:\\Users\\Laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
+//	vid.open("C:\\Users\\Laurent.PC-LAURENT-VISI\\Documents\\Visual Studio 2013\\AmplificationMouvement\\balance.avi");
+//	vid.open("C:\\Users\\Laurent\\Documents\\Visual Studio 2015\\AmplificationMouvement\\baby_mp4.mp4");
 	if (!vid.isOpened())
     {
         cout << "Video not opened!\n";
         exit(0);
     }
-    Mat m;
+    Mat m,m1;
 
     vid.read(m);
     vidWrite.open("write.avi",CV_FOURCC('M','J','P','G'),30,m.size());
-    //PyramideGaussienne pgPre(m);
     PyramideLaplacienne plPre(m);
-	if (0==1)
-    {
-        Mat x = plPre.Collpase();
-        vector<Mat> sx;
-        split(x,sx);
-        imshow("video",m);
-        vector<double> minVal(3), maxVal(3);
-        minMaxLoc(sx[0],&minVal[0],&maxVal[0]);
-        minMaxLoc(sx[1],&minVal[1],&maxVal[1]);
-        minMaxLoc(sx[2],&minVal[2],&maxVal[2]);
-        maxVal[0] = *max_element(maxVal.begin(),maxVal.end());
-        minVal[0] = *min_element(minVal.begin(),minVal.end());
-        Mat uc;
-        x.convertTo(uc,CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
-        imshow("Laplacian Motion",uc);
-        waitKey();
-    }
 
     PyramideRiesz prPre(plPre.get());
 	Pyramide phaseCos( prPre.getx(), true);
@@ -514,14 +495,21 @@ int main(int argc, char **argv)
 	Pyramide r1Cos(prPre.getx(),true);
 	Pyramide r0Sin( prPre.getx(), true);
 	Pyramide r1Sin(prPre.getx(),true);
+	Pyramide r0Cosf2( prPre.getx(), true);
+	Pyramide r1Cosf2(prPre.getx(),true);
+	Pyramide r0Sinf2( prPre.getx(), true);
+	Pyramide r1Sinf2(prPre.getx(),true);
 	Pyramide motionMagnified(prPre.getx());
-    Mat kernel;
-
-	kernel = Mat::ones(1, 1, CV_32F);// getGaussianKernel(3, -1);
+    Mat kernelx,kernely;
+    vector<Mat> riCos(2);
+    vector<Mat> riSin(2);
+	kernelx =  getGaussianKernel(5, 2);
+    kernely = kernelx.t();
     int numLevels = plPre.size()-1;
 	while (vid.read(m))
 	{
 		PyramideLaplacienne plAct(m);
+        DisplayImage(plAct.Collpase(),"collapse");;
 		PyramideRiesz prAct(plAct.get());
 		PyramideLaplacienne prMotionMagnifiedLap(plAct);
 		for (int i = 0; i < numLevels; i++)
@@ -529,13 +517,21 @@ int main(int argc, char **argv)
             vector<Mat> w=DifferencePhaseAmplitude(plAct[i],prAct.getx()[i],prAct.gety()[i],plPre[i],prPre.getx()[i],prPre.gety()[i]);
 			phaseCos[i] += w[0];
 			phaseSin[i] += w[1];
-			Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],&r0Cos[i],&r1Cos[i]);
-			Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],&r0Sin[i],&r1Sin[i]);
-			//Mat phaseFilterdCos=phaseCos[i];
-			//Mat phaseFilterdSin=phaseSin[i];
+            riCos[0]= r0Cos[i];
+            riCos[1]= r1Cos[i];
+            riSin[0]= r0Sin[i];
+            riSin[1]= r1Sin[i];
+			Mat phaseFilterdCos=IIRtemporalFilter(f,phaseCos[i],riCos);
+			Mat phaseFilterdSin=IIRtemporalFilter(f,phaseSin[i],riSin);
+            riCos[0]= r0Cosf2[i];
+            riCos[1]= r1Cosf2[i];
+            riSin[0]= r0Sinf2[i];
+            riSin[1]= r1Sinf2[i];
+			phaseFilterdCos-=IIRtemporalFilter(f2,phaseCos[i],riCos);
+			phaseFilterdSin-=IIRtemporalFilter(f2,phaseSin[i],riSin);
 
-            phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[2],kernel);
-            phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[2],kernel);
+            phaseFilterdCos = AmplitudeWeightedblur(phaseFilterdCos,w[2],kernelx,kernely);
+            phaseFilterdSin = AmplitudeWeightedblur(phaseFilterdSin,w[2],kernelx,kernely);
             Mat phaseMagnifiedFilteredCos;
             Mat phaseMagnifiedFilteredSin;
 
@@ -549,14 +545,16 @@ int main(int argc, char **argv)
         vector<Mat> sx;
         split(x,sx);
         imshow("video",m);
-        vector<double> minVal(3), maxVal(3);
-        minMaxLoc(sx[0],&minVal[0],&maxVal[0]);
-        minMaxLoc(sx[1],&minVal[1],&maxVal[1]);
-        minMaxLoc(sx[2],&minVal[2],&maxVal[2]);
-        maxVal[0] = *max_element(maxVal.begin(),maxVal.end());
-        minVal[0] = *min_element(minVal.begin(),minVal.end());
-        Mat uc;
-        x.convertTo(uc,CV_8U,255/(maxVal[0]-minVal[0]),-255*minVal[0]/(maxVal[0]-minVal[0]));
+	    vector<double> minVal(3), maxVal(3);
+	    for (int i = 0; i < sx.size(); i++)
+	    {
+		    minMaxLoc(sx[i], &minVal[i], &maxVal[i]);
+
+	    }
+	    maxVal[0] = *max_element(maxVal.begin(), maxVal.end());
+	    minVal[0] = *min_element(minVal.begin(), minVal.end());
+	    Mat uc;
+	    x.convertTo(uc, CV_8U,255/(maxVal[0]-minVal[0]),-0*minVal[0]/(maxVal[0]-minVal[0]));
         imshow("Laplacian Motion",uc);
         vidWrite << uc;
         waitKey(5);
@@ -567,13 +565,4 @@ int main(int argc, char **argv)
 
 
 	}
-    /* H(z) =\frac{Y(z)}{X(z)}= \frac{\sum_{k=0}^{N}b_k z^{-k}}{\sum_{k=0}^{M}a_k z^{-k}} */
-    /* y(n)=b_0x(n)+...b_N x(n-N)-a_1 y(n-1)-...-a_M y(n-M) */
-    cout <<  "Numerator = ";
-    for (int i = 0; i<f.b.size();i++)
-        cout << f.b[i] << "\t";
-    cout <<  "\n                  -----------------------\nDenominator = ";
-    for (int i = 0; i<f.a.size();i++)
-        cout << f.a[i] << "\t";
-    cout <<  "\n  ";
 }

@@ -56,7 +56,7 @@ IIRFilter::IIRFilter(string ftype, int order, double fs, vector<double> frequenc
     }
     else 
     {
-        // High pass
+        // band pass
         fLow= 2/fs*frequency[0];
         fHigh = 2/fs*frequency[1];
         a = CoefDenominatorBP();
