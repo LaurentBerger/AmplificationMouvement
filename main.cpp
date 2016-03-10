@@ -27,36 +27,40 @@ void DisplayImage(Mat x,string s)
 
 }
 
-class Pyramide {
+
+class Pyramid {
 protected:
-    vector<Mat> pyr;
+	int nbBand;
+    vector<vector<Mat > > pyr;
 public :
-    Pyramide(){};
-	Pyramide(Pyramide &p, bool zero);
-    vector<Mat> &get(){return pyr;};
+	Pyramid() {};
+	Pyramid(Mat m,int level=-1);
+	Pyramid(Pyramid &p, bool zero);
+    vector <vector<Mat> > &get(){return pyr;};
 
     void push_back(Mat m){ pyr.push_back(m); };
 	int size() { return pyr.size(); };
-	void swap(Pyramide x)
+	int NbBand() { if (pyr.size() == 0) return 0; return pyr[0].size(); };
+	void swap(Pyramid x)
 	{
 		pyr = x.pyr;
 	}
 
-    Mat & operator [](int i) {return pyr[i];}
-	Pyramide& operator=(Pyramide x)
+    vector<Mat> & operator [](int i) {return pyr[i];}
+	Pyramid& operator=(Pyramid x)
 	{
 		swap(x);
 		return *this;
 	}
 
 
-	Pyramide& operator+=(Pyramide& a)
+	Pyramid& operator+=(Pyramid& a)
 	{
-		if (pyr.size() != a.size())
+		if (pyr.size() != a.size() )
 		{
 			cv::Exception e;
 			e.code = -2;
-			e.msg = "Pyramide size must be equal";
+			e.msg = "Pyramid size must be equal";
 			throw e;
 		}
 		if (pyr[0].size() != a.get()[0].size())
@@ -66,85 +70,97 @@ public :
 			e.msg = "level 0 size  size must be equal";
 			throw e;
 		}
-		Pyramide p(a, false);
+		Pyramid p(a, false);
 		for (int i = 0; i < pyr.size(); i++)
 		{
-			p.get()[i] = pyr[i] + a.get()[i];
+			for (int j=0; j<a.get()[i].size();j++)
+				p.get()[i][j] = pyr[i][j] + a.get()[i][j];
 		}
 		return p;
 	}
-	friend Pyramide operator+(Pyramide a, const Pyramide& b)
+	friend Pyramid operator+(Pyramid a, const Pyramid& b)
 	{
 
 	}
+	virtual void collapse(int nbLevel=-1);
+	virtual void reduce(int nbLevel = -1);
 };
 
-Pyramide::Pyramide(Pyramide &p, bool zero)
+Pyramid::Pyramid(Pyramid &p, bool zero)
 {
 	pyr.resize(p.size());
 	for (int i = 0; i < p.size(); i++)
 	{
-		Mat m;
-		if (zero)
-			m = Mat::zeros(p.get()[i].size(), p.get()[i].type());
-		else
-			m = p.get()[i].clone();
-		pyr[i] = m;
+		for (int j = 0; j < p.get()[i].size(); j++)
+		{
+			Mat m;
+			if (zero)
+				m = Mat::zeros(p.get()[i][j].size(), p.get()[i][j].type());
+			else
+				m = p.get()[i][j].clone();
+			pyr[i] = m;
+		}
 	}
 }
 
-class PyramideGaussienne:public Pyramide {
+class GaussianPyramid:public Pyramid {
 public :
-    PyramideGaussienne(Mat );
+	GaussianPyramid(Mat );
 
 };
 
-class PyramideLaplacienne:public Pyramide {
+class LaplacianPyramid :public Pyramid {
+public:
+	LaplacianPyramid(Mat);
+	Mat Collapse();
+
+};
+
+
+
+class SteerableLaplacianPyramid:public Pyramid {
 static Mat lowPassFilter;
 static Mat highPassFilter;
 
     void InitFilters();
 
 public :
-    PyramideLaplacienne(vector<Mat> &);
-    PyramideLaplacienne(Mat &); // construct Laplacian pyramid using http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
-    Mat Collpase(Pyramide &gauss);
-    Mat Collpase();
-    vector<Mat> &get(){return pyr;};
-
+	SteerableLaplacianPyramid(vector<Mat> &);
+	SteerableLaplacianPyramid(Mat &); // construct Laplacian pyramid using http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
+//    Mat Collapse(Pyramid &gauss);
+    Mat Collapse();
+ 
 };
 
-class PyramideRiesz {
+class PyramidRiesz:public Pyramid {
 
-    Pyramide xPyr;
-    Pyramide yPyr;
 
 
 
     public :
-        PyramideRiesz(vector<Mat> &); // construct Riesz pyramid using laplacian pyramid
-        Pyramide &get(){return xPyr;};
-        Pyramide &getx(){return xPyr;};
-        Pyramide &gety(){return yPyr;};
+        PyramidRiesz(vector<Mat> &); // construct Riesz pyramid using laplacian pyramid
+		Mat Collapse();
 
 };
 
 
-PyramideGaussienne::PyramideGaussienne(Mat m):Pyramide()
+GaussianPyramid::GaussianPyramid(Mat m):Pyramid()
 {
     Mat x=m;
     Mat y;
     pyr.push_back(x);
     while (x.rows >= MIN_ROW_COL_PYRAMID && x.cols > MIN_ROW_COL_PYRAMID)
     {
-        pyrDown(x,y);
-        pyr.push_back(y);
+		vector<Mat> v;
+		pyrDown(x,y);
+		v.push_back(y);
+        pyr.push_back(v);
         x=y;
     }
 
 }
 
-PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
+SteerableLaplacianPyramid::SteerableLaplacianPyramid(vector<Mat> &m)
 {
     Mat y;
     for (int i = 1; i<m.size();i++)
@@ -161,7 +177,7 @@ PyramideLaplacienne::PyramideLaplacienne(vector<Mat> &m)
 }
 
 
-PyramideLaplacienne::PyramideLaplacienne(Mat &m)
+SteerableLaplacianPyramid::SteerableLaplacianPyramid(Mat &m)
 {
     if (lowPassFilter.empty())
         InitFilters();
@@ -169,9 +185,8 @@ PyramideLaplacienne::PyramideLaplacienne(Mat &m)
     
     Mat tmp=m;
     while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
-
     {   
-    Mat tmpLow,tmpHigh;
+	    Mat tmpLow,tmpHigh;
         filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
         pyr.push_back(tmpHigh);
         filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
@@ -181,51 +196,40 @@ PyramideLaplacienne::PyramideLaplacienne(Mat &m)
     pyr.push_back(tmp);
 }
 
-Mat PyramideLaplacienne::Collpase(Pyramide &gauss)
+Mat LaplacianPyramid::Collapse()
+{
+	Mat x, y;
+
+	y = pyr[pyr.size() - 1][0];
+	for (int i = pyr.size() - 2; i >= 0; i--)
+	{
+		pyrUp(y, x);
+		add(x, pyr[i], y);
+	}
+	return y;
+
+}
+
+
+
+Mat SteerableLaplacianPyramid::Collapse()
 {
     Mat x,y;
-
-   y=pyr[pyr.size()-1];
+    y = pyr[pyr.size()-1][0];
     for (int i = pyr.size()-2; i>=0;i--)
     {   
-        pyrUp(y,y);
-        add(y,pyr[i],y);
+        Mat tmp1,tmp2;
+        resize(y,x,pyr[i][0].size(),-1,-1,CV_INTER_NN);//pyrUp(y,x);
+        filter2D(x,tmp1,CV_32F,lowPassFilter);
+        filter2D(pyr[i],tmp2,CV_32F,highPassFilter);
+        add(tmp1,tmp2,y);
     }
     return y;
 }
 
-Mat PyramideLaplacienne::Collpase()
-{
-    Mat x,y;
-    if (lowPassFilter.rows == 0)
-    {
-        y = pyr[pyr.size()-1];
-        for (int i = pyr.size()-2; i>=0;i--)
-        {   
-            pyrUp(y,x);
-            add(x,pyr[i],y);
-        }
-        return y;
-
-    }
-    else
-    {
-        y = pyr[pyr.size()-1];
-        for (int i = pyr.size()-2; i>=0;i--)
-        {   
-            Mat tmp1,tmp2;
-            resize(y,x,pyr[i].size(),-1,-1,CV_INTER_NN);//pyrUp(y,x);
-            filter2D(x,tmp1,CV_32F,lowPassFilter);
-            filter2D(pyr[i],tmp2,CV_32F,highPassFilter);
-            add(tmp1,tmp2,y);
-        }
-        return y;
-    }
-}
 
 
-
-void PyramideLaplacienne::InitFilters()
+void SteerableLaplacianPyramid::InitFilters()
 {
     // Supplemental for Riesz Pyramid for Fast Phase-Based Video Magnification 
     lowPassFilter = (Mat_<float>(9,9)<< -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001,
@@ -251,7 +255,7 @@ void PyramideLaplacienne::InitFilters()
 
 
 
-PyramideRiesz::PyramideRiesz(vector<Mat> &m)
+PyramidRiesz::PyramidRiesz(vector<Mat> &m)
 {
 
 	    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
@@ -261,11 +265,13 @@ PyramideRiesz::PyramideRiesz(vector<Mat> &m)
 
 	for (int i = 0; i<m.size()-1;i++)
     {   
+		vector<Mat> v;
         Mat tmp1,tmp2;
         filter2D(m[i],tmp1,CV_32F,xKernel);
-        xPyr.push_back(tmp1);
+        v.push_back(tmp1);
 		filter2D(m[i],tmp2,CV_32F,yKernel);
-        yPyr.push_back(tmp2);
+        v.push_back(tmp2);
+		pyr.push_back(v);
     }
 
 }
@@ -433,8 +439,8 @@ Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel
     return r;
 }
 
-Mat PyramideLaplacienne::lowPassFilter;
-Mat PyramideLaplacienne::highPassFilter;
+Mat SteerableLaplacianPyramid::lowPassFilter;
+Mat SteerableLaplacianPyramid::highPassFilter;
 
 
 
@@ -565,23 +571,23 @@ int main(int argc, char **argv)
     split(mc,sx);
     m = sx[2];
     vidWrite.open("write.avi",CV_FOURCC('P','I','M','1'),30,m.size());
-    PyramideLaplacienne plPre(m);
+    PyramidLaplacienne plPre(m);
 
-    PyramideRiesz prPre(plPre.get());
+    PyramidRiesz prPre(plPre.get());
 
-	Pyramide phaseCos( prPre.getx(), true);
-	Pyramide phaseSin(prPre.getx(),true);
-    vector<Pyramide> rCos(std::max(f.a.size(),f.b.size()));
-    vector<Pyramide> rSin(std::max(f.a.size(),f.b.size()));
+	Pyramid phaseCos( prPre.getx(), true);
+	Pyramid phaseSin(prPre.getx(),true);
+    vector<Pyramid> rCos(std::max(f.a.size(),f.b.size()));
+    vector<Pyramid> rSin(std::max(f.a.size(),f.b.size()));
     for (int i = 0; i < std::max(f.a.size(), f.b.size()); i++)
     {
-        Pyramide r0( prPre.getx(), true);
-        Pyramide r1( prPre.getx(), true);
+        Pyramid r0( prPre.getx(), true);
+        Pyramid r1( prPre.getx(), true);
         rCos[i] = r0;
         rSin[i] = r1;
     }
 
-	Pyramide motionMagnified(prPre.getx());
+	Pyramid motionMagnified(prPre.getx());
     Mat kernelx,kernely;
     vector<Mat> riCos(std::max(f.a.size(), f.b.size()));
     vector<Mat> riSin(std::max(f.a.size(), f.b.size()));
@@ -596,9 +602,9 @@ int main(int argc, char **argv)
         split(mc,sx);
         m = sx[2];
         imshow("video",m);
-        PyramideLaplacienne plAct(m);
-		PyramideRiesz prAct(plAct.get());
-		PyramideLaplacienne prMotionMagnifiedLap(plAct);
+        PyramidLaplacienne plAct(m);
+		PyramidRiesz prAct(plAct.get());
+		PyramidLaplacienne prMotionMagnifiedLap(plAct);
 		for (int i = 0; i < numLevels; i++)
 		{
             vector<Mat> w=DifferencePhaseAmplitude(plAct[i],prAct.getx()[i],prAct.gety()[i],plPre[i],prPre.getx()[i],prPre.gety()[i]);
