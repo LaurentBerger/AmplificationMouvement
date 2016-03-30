@@ -5,6 +5,12 @@
 using namespace std;
 using namespace cv;
 
+/* Reference
+1 ICCP 2014 Riesz Pyramids for Fast Phase-Based Video Magnification  http://people.csail.mit.edu/nwadhwa/riesz-pyramid/
+2 In "Supplemental for Riesz Pyramids for Fast Phase-Based Video Magnification" supplemental material : http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
+*/
+
+
 #define MIN_ROW_COL_PYRAMID 32
 
 void DisplayImage(Mat x,string s)
@@ -26,256 +32,6 @@ void DisplayImage(Mat x,string s)
 	waitKey(); 
 
 }
-
-
-class Pyramid {
-protected:
-	int nbBand;
-    vector<vector<Mat > > pyr;
-public :
-	Pyramid() {};
-	Pyramid(Mat m,int level=-1);
-	Pyramid(Pyramid &p, bool zero);
-    vector <vector<Mat> > &get(){return pyr;};
-
-    void push_back(Mat m){ pyr.push_back(m); };
-	int size() { return pyr.size(); };
-	int NbBand() { if (pyr.size() == 0) return 0; return pyr[0].size(); };
-	void swap(Pyramid x)
-	{
-		pyr = x.pyr;
-	}
-
-    vector<Mat> & operator [](int i) {return pyr[i];}
-	Pyramid& operator=(Pyramid x)
-	{
-		swap(x);
-		return *this;
-	}
-
-
-	Pyramid& operator+=(Pyramid& a)
-	{
-		if (pyr.size() != a.size() )
-		{
-			cv::Exception e;
-			e.code = -2;
-			e.msg = "Pyramid size must be equal";
-			throw e;
-		}
-		if (pyr[0].size() != a.get()[0].size())
-		{
-			cv::Exception e;
-			e.code = -3;
-			e.msg = "level 0 size  size must be equal";
-			throw e;
-		}
-		Pyramid p(a, false);
-		for (int i = 0; i < pyr.size(); i++)
-		{
-			for (int j=0; j<a.get()[i].size();j++)
-				p.get()[i][j] = pyr[i][j] + a.get()[i][j];
-		}
-		return p;
-	}
-	friend Pyramid operator+(Pyramid a, const Pyramid& b)
-	{
-
-	}
-	virtual void collapse(int nbLevel=-1);
-	virtual void reduce(int nbLevel = -1);
-};
-
-Pyramid::Pyramid(Pyramid &p, bool zero)
-{
-	pyr.resize(p.size());
-	for (int i = 0; i < p.size(); i++)
-	{
-		for (int j = 0; j < p.get()[i].size(); j++)
-		{
-			Mat m;
-			if (zero)
-				m = Mat::zeros(p.get()[i][j].size(), p.get()[i][j].type());
-			else
-				m = p.get()[i][j].clone();
-			pyr[i] = m;
-		}
-	}
-}
-
-class GaussianPyramid:public Pyramid {
-public :
-	GaussianPyramid(Mat );
-
-};
-
-class LaplacianPyramid :public Pyramid {
-public:
-	LaplacianPyramid(Mat);
-	Mat Collapse();
-
-};
-
-
-
-class SteerableLaplacianPyramid:public Pyramid {
-static Mat lowPassFilter;
-static Mat highPassFilter;
-
-    void InitFilters();
-
-public :
-	SteerableLaplacianPyramid(vector<Mat> &);
-	SteerableLaplacianPyramid(Mat &); // construct Laplacian pyramid using http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
-//    Mat Collapse(Pyramid &gauss);
-    Mat Collapse();
- 
-};
-
-class PyramidRiesz:public Pyramid {
-
-
-
-
-    public :
-        PyramidRiesz(vector<Mat> &); // construct Riesz pyramid using laplacian pyramid
-		Mat Collapse();
-
-};
-
-
-GaussianPyramid::GaussianPyramid(Mat m):Pyramid()
-{
-    Mat x=m;
-    Mat y;
-    pyr.push_back(x);
-    while (x.rows >= MIN_ROW_COL_PYRAMID && x.cols > MIN_ROW_COL_PYRAMID)
-    {
-		vector<Mat> v;
-		pyrDown(x,y);
-		v.push_back(y);
-        pyr.push_back(v);
-        x=y;
-    }
-
-}
-
-SteerableLaplacianPyramid::SteerableLaplacianPyramid(vector<Mat> &m)
-{
-    Mat y;
-    for (int i = 1; i<m.size();i++)
-    {   
-        Mat tmp1,tmp2;
-        pyrUp(m[i],tmp1);
-        subtract(m[i-1],tmp1,tmp2,noArray(),CV_32F);
-        pyr.push_back(tmp2);
-    }
-    Mat x;
-    m[m.size() - 1].convertTo(x,CV_32F);
-    pyr.push_back(x);
-
-}
-
-
-SteerableLaplacianPyramid::SteerableLaplacianPyramid(Mat &m)
-{
-    if (lowPassFilter.empty())
-        InitFilters();
-
-    
-    Mat tmp=m;
-    while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
-    {   
-	    Mat tmpLow,tmpHigh;
-        filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
-        pyr.push_back(tmpHigh);
-        filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
-//		resize(tmpLow,tmp,Size(),0.5,0.5);
-		pyrDown(tmpLow,tmp);
-    }
-    pyr.push_back(tmp);
-}
-
-Mat LaplacianPyramid::Collapse()
-{
-	Mat x, y;
-
-	y = pyr[pyr.size() - 1][0];
-	for (int i = pyr.size() - 2; i >= 0; i--)
-	{
-		pyrUp(y, x);
-		add(x, pyr[i], y);
-	}
-	return y;
-
-}
-
-
-
-Mat SteerableLaplacianPyramid::Collapse()
-{
-    Mat x,y;
-    y = pyr[pyr.size()-1][0];
-    for (int i = pyr.size()-2; i>=0;i--)
-    {   
-        Mat tmp1,tmp2;
-        resize(y,x,pyr[i][0].size(),-1,-1,CV_INTER_NN);//pyrUp(y,x);
-        filter2D(x,tmp1,CV_32F,lowPassFilter);
-        filter2D(pyr[i],tmp2,CV_32F,highPassFilter);
-        add(tmp1,tmp2,y);
-    }
-    return y;
-}
-
-
-
-void SteerableLaplacianPyramid::InitFilters()
-{
-    // Supplemental for Riesz Pyramid for Fast Phase-Based Video Magnification 
-    lowPassFilter = (Mat_<float>(9,9)<< -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001,
-	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
-	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
-	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
-	                                    -0.0057,   -0.0003,   0.0387,   0.0910,   0.1138,   0.0910,   0.0387,  -0.0003,  -0.0057,
-	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
-	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
-	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
-	                                    -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001);
-    highPassFilter=(Mat_<float>(9,9)<<   0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000,
-	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
-	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
-	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
-	                                     0.0027,   0.0123,   0.0292,   0.0469,  -0.9455,   0.0469,   0.0292,   0.0123,   0.0027,
-	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
-	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
-	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
-	                                     0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000);
-}
-
-
-
-
-PyramidRiesz::PyramidRiesz(vector<Mat> &m)
-{
-
-	    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
-	    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
-	//    Mat yKernel=(Mat_<float>(3,3) << -0.12, -0.34, -0.12, 0,0,0, 0.12, 0.34, 0.12);
-	//    Mat xKernel=yKernel.t();
-
-	for (int i = 0; i<m.size()-1;i++)
-    {   
-		vector<Mat> v;
-        Mat tmp1,tmp2;
-        filter2D(m[i],tmp1,CV_32F,xKernel);
-        v.push_back(tmp1);
-		filter2D(m[i],tmp2,CV_32F,yKernel);
-        v.push_back(tmp2);
-		pyr.push_back(v);
-    }
-
-}
-
 
 Mat ArcCos(Mat m)
 {
@@ -359,6 +115,425 @@ Mat Sin(Mat m)
     return t;
 }
 
+enum {
+    GAUSSIAN_PYRAMID,
+    BURT_ADELSON_PYRAMID,
+    LAPLACIAN_LIKE_PYRAMID,
+    RIESZ_PYRAMID
+};
+
+
+class Pyramid {
+protected:
+    int type; // 0 Gaussain 1 Lapalacian, 2 LAPLACIAN_LIKE pyramid (ref 1),3 Riesz
+	int nbBand;
+    vector<vector<Mat > > pyr;
+public :
+	Pyramid() {nbBand=0;type=GAUSSIAN_PYRAMID;};
+	Pyramid(Mat m,int level=-1);
+	Pyramid(Pyramid &p, bool zero,int idxBand=-1);
+    Pyramid(Pyramid &p);
+    vector <vector<Mat> > &get(){return pyr;};
+
+    void push_back(Mat m){ pyr.push_back(m); };
+	int size() { return pyr.size(); };
+	int NbBand() { if (pyr.size() == 0) return 0; return pyr[0].size(); };// A REVOIR 
+
+    vector<Mat> & operator [](int i) {return pyr[i];}
+	Pyramid& operator=(Pyramid &x)
+	{
+        nbBand = x.NbBand();
+        type= x.type;
+
+        for (int i = 0; i < x.size(); i++)
+        {
+            pyr.push_back(x[i]);
+        }
+		return *this;
+	}
+
+	Pyramid& operator+=(Pyramid& a)
+	{
+		if (pyr.size() != a.size() )
+		{
+			cv::Exception e;
+			e.code = -2;
+			e.msg = "Pyramid size must be equal";
+			throw e;
+		}
+		if (pyr[0].size() != a.get()[0].size())
+		{
+			cv::Exception e;
+			e.code = -3;
+			e.msg = "level 0 size  size must be equal";
+			throw e;
+		}
+		Pyramid p(a, false);
+		for (int i = 0; i < pyr.size(); i++)
+		{
+			for (int j=0; j<a.get()[i].size();j++)
+				p.get()[i][j] = pyr[i][j] + a.get()[i][j];
+		}
+        p.type=a.type;
+		return p;
+	}
+	friend Pyramid operator+(Pyramid a, const Pyramid& b)
+	{
+
+	}
+    virtual Mat collapse(int nbLevel=-1){return Mat();};
+	virtual void reduce(int nbLevel = -1){};
+};
+
+Pyramid::Pyramid(Pyramid &p, bool zero, int idxBand) 
+{
+    type=p.type;
+    nbBand = p.NbBand();
+
+    if (idxBand >= 0 && idxBand >= p.NbBand())
+    {
+		cv::Exception e;
+        e.code = -1;
+        e.msg = "invalid index band";
+        throw e;
+    }
+	pyr.resize(p.size());
+	for (int i = 0; i < p.size(); i++)
+	{
+        if (idxBand==-1)
+            for (int j = 0; j < p.get()[i].size(); j++)
+		    {
+			    Mat m;
+			    if (zero)
+				    m = Mat::zeros(p.get()[i][j].size(), p.get()[i][j].type());
+			    else
+				    m = p.get()[i][j].clone();
+			    pyr[i].push_back(m);
+		    }
+        else
+        {
+			Mat m;
+			if (zero)
+				m = Mat::zeros(p.get()[i][idxBand].size(), p.get()[i][idxBand].type());
+			else
+				m = p.get()[i][idxBand].clone();
+			pyr[i].push_back(m);
+
+        }
+	}
+}
+
+
+Pyramid::Pyramid(Pyramid &p)
+{
+    type=p.type;
+    nbBand = p.NbBand();
+	pyr.resize(p.size());
+	for (int i = 0; i < p.size(); i++)
+	{
+	    pyr[i].resize(p[i].size());
+	}
+
+}
+
+class GaussianPyramid:public Pyramid {
+public :
+    GaussianPyramid(Mat m);
+
+};
+
+
+class LaplacianPyramid :public Pyramid {
+    Mat lowPassFilter;
+    Mat highPassFilter;
+
+    void InitFilters();
+public:
+	LaplacianPyramid(Mat &,int typeLaplacian=BURT_ADELSON_PYRAMID);
+    LaplacianPyramid(LaplacianPyramid &p);
+    LaplacianPyramid(LaplacianPyramid &p, bool zero, int idxBand=-1);
+	Mat Collapse(int nbLevel=-1);
+	void Reduce(int nbLevel=-1);
+
+};
+
+
+/*
+class SteerableLaplacianPyramid:public Pyramid {
+
+
+public :
+	SteerableLaplacianPyramid(vector<Mat> &);
+	SteerableLaplacianPyramid(Mat &); // construct Laplacian pyramid using http://people.csail.mit.edu/nwadhwa/riesz-pyramid/RieszPyrSupplemental.zip
+//    Mat Collapse(Pyramid &gauss);
+    Mat Collapse();
+ 
+};*/
+
+class PyramidRiesz:public Pyramid {
+
+    public :
+        PyramidRiesz(LaplacianPyramid &p); // construct Riesz pyramid using laplacian pyramid
+		Mat Collapse(int nbLevel=-1);
+	void Reduce(int nbLevel=-1);
+
+};
+
+
+GaussianPyramid::GaussianPyramid(Mat m):Pyramid()
+{
+    Mat x=m;
+    Mat y;
+    pyr.push_back(x);
+    nbBand=1;
+    while (x.rows >= MIN_ROW_COL_PYRAMID && x.cols > MIN_ROW_COL_PYRAMID)
+    {
+		vector<Mat> v;
+		pyrDown(x,y);
+		v.push_back(y);
+        pyr.push_back(v);
+        x=y;
+    }
+
+}
+
+LaplacianPyramid::LaplacianPyramid(LaplacianPyramid &p):Pyramid(static_cast<Pyramid> (p))
+{
+ 
+    type=p.type;
+    if (type==LAPLACIAN_LIKE_PYRAMID)
+        InitFilters();
+
+}
+
+LaplacianPyramid::LaplacianPyramid(LaplacianPyramid &p, bool zero, int idxBand) :Pyramid(p,zero,idxBand)
+{
+    type=p.type;
+    nbBand = p.NbBand();
+
+    if (idxBand >= 0 && idxBand >= p.NbBand())
+    {
+		cv::Exception e;
+        e.code = -1;
+        e.msg = "invalid index band";
+        throw e;
+    }
+	pyr.resize(p.size());
+	for (int i = 0; i < p.size(); i++)
+	{
+        if (idxBand==-1)
+            for (int j = 0; j < p.get()[i].size(); j++)
+		    {
+			    Mat m;
+			    if (zero)
+				    m = Mat::zeros(p.get()[i][j].size(), p.get()[i][j].type());
+			    else
+				    m = p.get()[i][j].clone();
+			    pyr[i].push_back(m);
+		    }
+        else
+        {
+			Mat m;
+			if (zero)
+				m = Mat::zeros(p.get()[i][idxBand].size(), p.get()[i][idxBand].type());
+			else
+				m = p.get()[i][idxBand].clone();
+			pyr[i].push_back(m);
+
+        }
+	}
+}
+
+
+
+LaplacianPyramid::LaplacianPyramid(Mat &m,int laplacianType)
+{
+    if (laplacianType != LAPLACIAN_LIKE_PYRAMID && laplacianType != BURT_ADELSON_PYRAMID)
+    {
+		cv::Exception e;
+        e.code = -1;
+        e.msg = "Unknown laplacian type";
+        throw e;
+
+    }
+    if (laplacianType==LAPLACIAN_LIKE_PYRAMID && lowPassFilter.empty())
+        InitFilters();
+
+    type=laplacianType;
+    Mat tmp=m;
+    if (laplacianType == LAPLACIAN_LIKE_PYRAMID)
+    {
+        while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
+        {   
+	        Mat tmpLow,tmpHigh;
+            filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
+            vector<Mat> v;
+            v.push_back(tmpHigh);
+            pyr.push_back(v);
+            filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
+    //		resize(tmpLow,tmp,Size(),0.5,0.5);
+		    pyrDown(tmpLow,tmp);
+        }
+        vector<Mat> v;
+        v.push_back(tmp);
+        pyr.push_back(v);
+    }
+    if (laplacianType == BURT_ADELSON_PYRAMID)
+    {
+        Mat tmp=m;
+        while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
+        {   
+            Mat tmp1,tmp2;
+            pyrDown(tmp,tmp1);
+            pyrUp(tmp1,tmp2);
+            subtract(tmp,tmp2,tmp1,noArray(),CV_32F);
+            vector<Mat> v;
+            v.push_back(tmp1);
+            pyr.push_back(v);
+            tmp=tmp1;
+        }
+        vector<Mat> v; 
+        v.push_back(tmp);
+        pyr.push_back(v);
+    }
+}
+
+/*
+SteerableLaplacianPyramid::SteerableLaplacianPyramid(vector<Mat> &m)
+{
+    Mat y;
+    for (int i = 1; i<m.size();i++)
+    {   
+        Mat tmp1,tmp2;
+        pyrUp(m[i],tmp1);
+        subtract(m[i-1],tmp1,tmp2,noArray(),CV_32F);
+        pyr.push_back(tmp2);
+    }
+    Mat x;
+    m[m.size() - 1].convertTo(x,CV_32F);
+    pyr.push_back(x);
+
+}
+
+
+SteerableLaplacianPyramid::SteerableLaplacianPyramid(Mat &m)
+{
+    if (lowPassFilter.empty())
+        InitFilters();
+
+    
+    Mat tmp=m;
+    while (tmp.rows >= MIN_ROW_COL_PYRAMID && tmp.cols > MIN_ROW_COL_PYRAMID)
+    {   
+	    Mat tmpLow,tmpHigh;
+        filter2D(tmp,tmpHigh,CV_32F,highPassFilter);
+        pyr.push_back(tmpHigh);
+        filter2D(tmp,tmpLow,CV_32F,lowPassFilter);
+//		resize(tmpLow,tmp,Size(),0.5,0.5);
+		pyrDown(tmpLow,tmp);
+    }
+    pyr.push_back(tmp);
+}
+*/
+
+Mat LaplacianPyramid::Collapse(int nbLevel)
+{
+	Mat x, y;
+
+	y = pyr[pyr.size() - 1][0];
+    switch (type){
+    case  BURT_ADELSON_PYRAMID :
+	    for (int i = pyr.size() - 2; i >= 0; i--)
+	    {
+		    pyrUp(y, x);
+		    add(x, pyr[i][0], y);
+	    }
+        break;
+    case  LAPLACIAN_LIKE_PYRAMID :
+        for (int i = pyr.size()-2; i>=0;i--)
+        {   
+            Mat tmp1,tmp2;
+            resize(y,x,pyr[i][0].size(),-1,-1,CV_INTER_NN);
+            filter2D(x,tmp1,CV_32F,lowPassFilter);
+            filter2D(pyr[i][0],tmp2,CV_32F,highPassFilter);
+            add(tmp1,tmp2,y);
+        }
+        break;
+    }
+	return y;
+
+}
+
+
+void LaplacianPyramid::InitFilters()
+{
+    // Ref 2 
+    lowPassFilter = (Mat_<float>(9,9)<< -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001,
+	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
+	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
+	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
+	                                    -0.0057,   -0.0003,   0.0387,   0.0910,   0.1138,   0.0910,   0.0387,  -0.0003,  -0.0057,
+	                                    -0.0046,   -0.0025,   0.0272,   0.0706,   0.0910,   0.0706,   0.0272,  -0.0025,  -0.0046,
+	                                    -0.0023,   -0.0047,   0.0054,   0.0272,   0.0387,   0.0272,   0.0054,  -0.0047,  -0.0023,
+	                                    -0.0007,   -0.0030,  -0.0047,  -0.0025,  -0.0003,  -0.0025,  -0.0047,  -0.0030,  -0.0007,
+	                                    -0.0001,   -0.0007,  -0.0023,  -0.0046,  -0.0057,  -0.0046,  -0.0023,  -0.0007,  -0.0001);
+    highPassFilter=(Mat_<float>(9,9)<<   0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000,
+	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                     0.0027,   0.0123,   0.0292,   0.0469,  -0.9455,   0.0469,   0.0292,   0.0123,   0.0027,
+	                                     0.0022,   0.0103,   0.0249,   0.0402,   0.0469,   0.0402,   0.0249,   0.0103,   0.0022,
+	                                     0.0011,   0.0059,   0.0151,   0.0249,   0.0292,   0.0249,   0.0151,   0.0059,   0.0011,
+	                                     0.0003,   0.0020,   0.0059,   0.0103,   0.0123,   0.0103,   0.0059,   0.0020,   0.0003,
+	                                     0.0000,   0.0003,   0.0011,   0.0022,   0.0027,   0.0022,   0.0011,   0.0003,   0.0000);
+}
+
+
+/*
+Mat SteerableLaplacianPyramid::Collapse()
+{
+    Mat x,y;
+    y = pyr[pyr.size()-1][0];
+    for (int i = pyr.size()-2; i>=0;i--)
+    {   
+        Mat tmp1,tmp2;
+        resize(y,x,pyr[i][0].size(),-1,-1,CV_INTER_NN);//pyrUp(y,x);
+        filter2D(x,tmp1,CV_32F,lowPassFilter);
+        filter2D(pyr[i],tmp2,CV_32F,highPassFilter);
+        add(tmp1,tmp2,y);
+    }
+    return y;
+}
+
+*/
+
+
+
+
+
+PyramidRiesz::PyramidRiesz(LaplacianPyramid &p)
+{
+    type=RIESZ_PYRAMID;
+	    Mat xKernel=(Mat_<float>(3,3) << 0, 0, 0, 0.5, 0, -0.5, 0, 0, 0);
+	    Mat yKernel=(Mat_<float>(3,3) << 0, .5, 0, 0, 0, 0, 0, -0.5, 0);
+	//    Mat yKernel=(Mat_<float>(3,3) << -0.12, -0.34, -0.12, 0,0,0, 0.12, 0.34, 0.12);
+	//    Mat xKernel=yKernel.t();
+
+	for (int i = 0; i<p.size()-1;i++)
+    {   
+		vector<Mat> v;
+        Mat tmp1,tmp2;
+        filter2D(p[i][0],tmp1,CV_32F,xKernel);
+        v.push_back(tmp1);
+		filter2D(p[i][0],tmp2,CV_32F,yKernel);
+        v.push_back(tmp2);
+		pyr.push_back(v);
+    }
+
+}
+
+
+
 
 
 vector<Mat> DifferencePhaseAmplitude(Mat &c_real, Mat &cRzX, Mat &cRzY, Mat &p_real, Mat &pRzX, Mat &pRzY )
@@ -439,13 +614,19 @@ Mat PhaseShiftCoefficientRealPart(Mat laplevel, Mat rieszXLevel, Mat rieszYLevel
     return r;
 }
 
-Mat SteerableLaplacianPyramid::lowPassFilter;
-Mat SteerableLaplacianPyramid::highPassFilter;
-
+#include <iomanip>
 
 
 int main(int argc, char **argv)
 {
+    unsigned int buffer[65536];
+    for (int i=0;i<65536;i++)
+        buffer[i]=i;
+    Mat img(128,128,CV_32S,buffer),img1,img2;
+    bitwise_and(img,0xFFF,img1);
+    img1.convertTo(img2,CV_16U);
+    imshow("t",img2);
+    waitKey();
 
 	if (0==1)
 	{
@@ -531,21 +712,22 @@ int main(int argc, char **argv)
     double x;
     cout << "f1 = ";
     cin>>x;
-    if (x!=-1)
+    if (x != -1)
+    {
         pb[0]=x;
-    cout << "f2 = ";
-    cin>>x;
-    if (x!=-1)
-        pb[1]=x;
-    cout << "Sampling frequency = ";
-    cin>>x;
-    if (x!=-1)
-        pb[2]=x;
+        cout << "f2 = ";
+        cin>>x;
+        if (x!=-1)
+            pb[1]=x;
+        cout << "Sampling frequency = ";
+        cin>>x;
+        if (x!=-1)
+            pb[2]=x;
+
+    }
     int ordre;
     cout << "Order filter (more than 3  unstable) = ";
     cin>>ordre;
-    if (x!=-1)
-        pb[2]=x;
     double fs = pb[2];
     pb.resize(2);
     double amplificationfactor=50;
@@ -571,23 +753,23 @@ int main(int argc, char **argv)
     split(mc,sx);
     m = sx[2];
     vidWrite.open("write.avi",CV_FOURCC('P','I','M','1'),30,m.size());
-    PyramidLaplacienne plPre(m);
+    LaplacianPyramid plPre(m,LAPLACIAN_LIKE_PYRAMID);
 
-    PyramidRiesz prPre(plPre.get());
+    PyramidRiesz prPre(plPre);
 
-	Pyramid phaseCos( prPre.getx(), true);
-	Pyramid phaseSin(prPre.getx(),true);
+	Pyramid phaseCos( prPre, true,0);
+	Pyramid phaseSin(prPre,true,0);
     vector<Pyramid> rCos(std::max(f.a.size(),f.b.size()));
     vector<Pyramid> rSin(std::max(f.a.size(),f.b.size()));
     for (int i = 0; i < std::max(f.a.size(), f.b.size()); i++)
     {
-        Pyramid r0( prPre.getx(), true);
-        Pyramid r1( prPre.getx(), true);
+        Pyramid r0( prPre, true,0);
+        Pyramid r1( prPre, true,0);
         rCos[i] = r0;
         rSin[i] = r1;
     }
 
-	Pyramid motionMagnified(prPre.getx());
+	Pyramid motionMagnified(prPre);
     Mat kernelx,kernely;
     vector<Mat> riCos(std::max(f.a.size(), f.b.size()));
     vector<Mat> riSin(std::max(f.a.size(), f.b.size()));
@@ -602,21 +784,22 @@ int main(int argc, char **argv)
         split(mc,sx);
         m = sx[2];
         imshow("video",m);
-        PyramidLaplacienne plAct(m);
-		PyramidRiesz prAct(plAct.get());
-		PyramidLaplacienne prMotionMagnifiedLap(plAct);
+        LaplacianPyramid plAct(m,LAPLACIAN_LIKE_PYRAMID);
+		PyramidRiesz prAct(plAct);
+		LaplacianPyramid prMotionMagnifiedLap(plAct);
+        
 		for (int i = 0; i < numLevels; i++)
 		{
-            vector<Mat> w=DifferencePhaseAmplitude(plAct[i],prAct.getx()[i],prAct.gety()[i],plPre[i],prPre.getx()[i],prPre.gety()[i]);
-			phaseCos[i] += w[0];
-			phaseSin[i] += w[1];
+            vector<Mat> w=DifferencePhaseAmplitude(plAct[i][0],prAct[i][0],prAct[i][1],plPre[i][0],prPre[i][0],prPre[i][1]);
+			phaseCos[i][0] += w[0];
+			phaseSin[i][0] += w[1];
             for (int j = 0;j < riCos.size(); j++)
             {
-                riCos[j] = rCos[j][i];
-                riSin[j] = rSin[j][i];
+                riCos[j] = rCos[j][i][0];
+                riSin[j] = rSin[j][i][0];
             }
-			Mat phaseFilteredCos=IIRtemporalFilter(f,phaseCos[i],riCos);
-			Mat phaseFilteredSin=IIRtemporalFilter(f,phaseSin[i],riSin);
+			Mat phaseFilteredCos=IIRtemporalFilter(f,phaseCos[i][0],riCos);
+			Mat phaseFilteredSin=IIRtemporalFilter(f,phaseSin[i][0],riSin);
 
 
             phaseFilteredCos = AmplitudeWeightedblur(phaseFilteredCos,w[2],kernelx,kernely);
@@ -626,11 +809,11 @@ int main(int argc, char **argv)
 
 			phaseMagnifiedFilteredCos = amplificationfactor*phaseFilteredCos;
 			phaseMagnifiedFilteredSin = amplificationfactor*phaseFilteredSin;
-			prMotionMagnifiedLap[i]=PhaseShiftCoefficientRealPart(plAct[i], prAct.getx()[i], prAct.gety()[i], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
+			prMotionMagnifiedLap[i][0]=PhaseShiftCoefficientRealPart(plAct[i][0], prAct[i][0], prAct[i][1], phaseMagnifiedFilteredCos, phaseMagnifiedFilteredSin);
 
 		}
-        prMotionMagnifiedLap[numLevels]=plAct[numLevels];
-        Mat x = prMotionMagnifiedLap.Collpase();
+        prMotionMagnifiedLap[numLevels][0]=plAct[numLevels][0];
+        Mat x = prMotionMagnifiedLap.Collapse();
 	    double minVal, maxVal;
 		minMaxLoc(x, &minVal, &maxVal);
 
